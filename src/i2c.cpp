@@ -1,10 +1,19 @@
+#include <Arduino.h>
 #include <kinetis.h>
 #include "../include/i2c.h"
+#include <FreeRTOS.h>
+#include <semphr.h>
+#include <uart.h>
 
 #define I2C_FLT_SSIE (1 << 5)
 #define I2C_FLT_STARTF (1 << 4)
 
 void I2C::begin(){
+	// initilialize the mutex
+	lock_mutex = xSemaphoreCreateBinary();
+	wait_sem = xSemaphoreCreateBinary();
+	xSemaphoreGive(lock_mutex);
+
 	SIM_SCGC4 |= SIM_SCGC4_I2C0; // clock the module
 	I2C0_C1 = 0;
 
@@ -22,7 +31,16 @@ void I2C::begin(){
 	NVIC_ENABLE_IRQ(IRQ_I2C0);
 }
 
+void I2C::end(){
+	vSemaphoreDelete(lock_mutex);
+	vSemaphoreDelete(wait_sem);
+}
+
 bool I2C::write(uint8_t address, const uint8_t *data, int length) {
+	if(xSemaphoreTake(lock_mutex, pdMS_TO_TICKS(100)) != pdTRUE){
+		return false;
+	}
+
 	txBufferIndex = 0;
 	txBufferLength = length;
 	txAddress = address << 1;
@@ -35,12 +53,20 @@ bool I2C::write(uint8_t address, const uint8_t *data, int length) {
 	
 	I2C0_C1 |= I2C_C1_MST | I2C_C1_TX;
 
-	while(!done)
-		;
-	return !had_error;
+	bool ret;
+	if(!xSemaphoreTake(wait_sem, pdMS_TO_TICKS(100)))
+		ret = false;
+	else
+		ret = !had_error;
+
+	xSemaphoreGive(lock_mutex);
+	return ret;
 }
 
 bool I2C::read(uint8_t address, uint8_t *buffer, int length){
+	if(!xSemaphoreTake(lock_mutex, pdMS_TO_TICKS(100)))
+		return false;
+
 	rxBuffer = buffer;
 	rxBufferIndex = 0;
 	rxBufferLength = length;
@@ -53,9 +79,15 @@ bool I2C::read(uint8_t address, uint8_t *buffer, int length){
 
 	I2C0_C1 |= I2C_C1_MST | I2C_C1_TX;
 
-	while(!done)
-		;
-	return !had_error;
+	bool ret;
+	if(!xSemaphoreTake(wait_sem, pdMS_TO_TICKS(100)))
+		ret = false;
+	else
+		ret = !had_error;
+
+	xSemaphoreGive(lock_mutex);
+	return ret;
+
 }
 
 void I2C::isr(){
@@ -64,6 +96,7 @@ void I2C::isr(){
 		I2C0_FLT |= I2C_FLT_STOPF;
 		I2C0_S |= I2C_S_IICIF;
 		done = true;
+		xSemaphoreGiveFromISR(wait_sem, NULL);
 		return;
 	}
 

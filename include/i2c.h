@@ -2,22 +2,15 @@
 #define TEENSY36_I2C_H
 #include <stdbool.h>
 #include <stdint.h>
+#include <FreeRTOS.h>
+#include <semphr.h>
 
 class I2C {
 public:
 	void begin();
+	void end();
 	bool write(uint8_t address, const uint8_t *data, int length);
-	bool write_to(uint8_t address, uint8_t reg, uint8_t data){
-		const uint8_t buffer[2] = {reg, data};
-		return write(address, buffer, 2);
-	}
-
 	bool read(uint8_t address, uint8_t *buffer, int length);
-	bool read_from(uint8_t address, uint8_t reg, uint8_t *buffer, int length){
-		if(!write(address, &reg, 1))
-			return false;
-		return read(address, buffer, length);
-	}
 
 private:
 	void isr();
@@ -25,19 +18,22 @@ private:
 
 	uint8_t txAddress;
 
+	SemaphoreHandle_t lock_mutex;
+	SemaphoreHandle_t wait_sem;
+
 	const uint8_t *txBuffer;
-	int txBufferLength;
-	int txBufferIndex;
+	volatile int txBufferLength;
+	volatile int txBufferIndex;
 
 	uint8_t *rxBuffer;
-	int rxBufferLength;
-	int rxBufferIndex;
+	volatile int rxBufferLength;
+	volatile int rxBufferIndex;
 
-	bool transmitting;
-	bool writing;
-	bool done;
-	bool had_error;
-	bool address_sent;
+	volatile bool transmitting;
+	volatile bool writing;
+	volatile bool done;
+	volatile bool had_error;
+	volatile bool address_sent;
 };
 
 
