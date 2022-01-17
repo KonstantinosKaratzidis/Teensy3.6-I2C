@@ -3,9 +3,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define I2C_FLT_SSIE (1 << 5)
-#define I2C_FLT_STARTF (1 << 4)
-
 class I2C {
 public:
 	void begin();

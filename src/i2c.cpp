@@ -1,6 +1,5 @@
 #include <kinetis.h>
-#include "i2c.h"
-#include "uart.h"
+#include "../include/i2c.h"
 
 #define I2C_FLT_SSIE (1 << 5)
 #define I2C_FLT_STARTF (1 << 4)
